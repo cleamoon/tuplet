@@ -23,7 +23,7 @@ def play_audio_preview(audio_path, start_seconds=0, duration_seconds=5):
             bytes_per_sample=segment.sample_width,
             sample_rate=segment.frame_rate,
         )
-        playback.wait_done()
+        return playback
     except Exception as exc:
         raise RuntimeError(str(exc)) from exc
 
@@ -31,6 +31,7 @@ def play_audio_preview(audio_path, start_seconds=0, duration_seconds=5):
 def file_browser(stdscr, start_path: Path):
     curses.curs_set(0)
     state = BrowserState(current_path=start_path)
+    current_playback = None
 
     while True:
         entries, has_parent = list_entries(state)
@@ -52,6 +53,8 @@ def file_browser(stdscr, start_path: Path):
         key = stdscr.getch()
 
         if key in (ord('q'), 27):  # q or ESC to quit
+            if current_playback is not None:
+                current_playback.stop()
             break
         else:
             state.current_path, state.selected, state.scroll, state.show_hidden, action = handle_key(
@@ -68,7 +71,9 @@ def file_browser(stdscr, start_path: Path):
                 chosen = action[1]
                 show_status(stdscr, f"Playing preview: {chosen.name}")
                 try:
-                    play_audio_preview(chosen)
+                    if current_playback is not None:
+                        current_playback.stop()
+                    current_playback = play_audio_preview(chosen)
                 except RuntimeError as exc:
                     show_status(stdscr, f"Error: {exc}")
                     stdscr.getch()
