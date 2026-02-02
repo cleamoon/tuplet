@@ -1,9 +1,10 @@
+import argparse
 import curses
 from pathlib import Path
 
 from controller import handle_key
 from model import AUDIO_EXTS, BrowserState, build_display, clamp_selection, list_entries
-from view import get_visible_height, render_browser, show_audio_selected, show_status
+from view import get_visible_height, render_browser, show_status
 from pydub import AudioSegment
 import simpleaudio as sa
 
@@ -27,9 +28,9 @@ def play_audio_preview(audio_path, start_seconds=0, duration_seconds=5):
         raise RuntimeError(str(exc)) from exc
 
 
-def file_browser(stdscr):
+def file_browser(stdscr, start_path: Path):
     curses.curs_set(0)
-    state = BrowserState(current_path=Path.home())
+    state = BrowserState(current_path=start_path)
 
     while True:
         entries, has_parent = list_entries(state)
@@ -73,5 +74,20 @@ def file_browser(stdscr):
                     stdscr.getch()
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Browse directories and preview audio files.",
+    )
+    parser.add_argument(
+        "path",
+        nargs="?",
+        default=str(Path.home()),
+        help="Folder to open (defaults to home directory).",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    curses.wrapper(file_browser)
+    args = parse_args()
+    start_path = Path(args.path).expanduser().resolve()
+    curses.wrapper(file_browser, start_path)
