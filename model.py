@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from pathlib import Path
+import threading
 
-from pydub import AudioSegment
-import simpleaudio as sa
+import mpv
 
 AUDIO_EXTS = {".mp3", ".flac", ".ogg", ".wav", ".m4a"}
 
@@ -17,36 +17,33 @@ class BrowserState:
 
 class AudioPreviewPlayer:
     def __init__(self):
-        self.current_playback = None
+        self.player = mpv.MPV(video=False)
+        self.stop_timer = None
 
     def stop(self):
-        if self.current_playback is not None:
-            self.current_playback.stop()
-            self.current_playback = None
+        if self.stop_timer is not None:
+            self.stop_timer.cancel()
+            self.stop_timer = None
+        try:
+            self.player.stop()
+        except Exception:
+            pass
 
-    def play(self, audio_path):
+    def play(self, audio_path, start_seconds=0, duration_seconds=5):
         self.stop()
-        self.current_playback = play_audio_preview(audio_path)
-        return self.current_playback
-
-
-def play_audio_preview(audio_path, start_seconds=0, duration_seconds=5):
-    audio_path = str(audio_path)
-    try:
-        segment = AudioSegment.from_file(audio_path)
-    except Exception as exc:
-        raise RuntimeError(str(exc)) from exc
-
-    try:
-        playback = sa.play_buffer(
-            segment.raw_data,
-            num_channels=segment.channels,
-            bytes_per_sample=segment.sample_width,
-            sample_rate=segment.frame_rate,
-        )
-        return playback
-    except Exception as exc:
-        raise RuntimeError(str(exc)) from exc
+        audio_path = str(audio_path)
+        try:
+            self.player.play(audio_path)
+            if start_seconds:
+                self.player.seek(max(0, float(start_seconds)), reference="absolute")
+            if duration_seconds is not None:
+                duration = max(0, float(duration_seconds))
+                self.stop_timer = threading.Timer(duration, self.stop)
+                self.stop_timer.daemon = True
+                self.stop_timer.start()
+        except Exception as exc:
+            raise RuntimeError(str(exc)) from exc
+        return self.player
 
 
 def list_entries(state: BrowserState):
