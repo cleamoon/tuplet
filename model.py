@@ -41,29 +41,20 @@ class BrowserState:
 class AudioPreviewPlayer:
     def __init__(self):
         self.player = mpv.MPV(video=False)
-        self.stop_timer = None
 
     def stop(self):
-        if self.stop_timer is not None:
-            self.stop_timer.cancel()
-            self.stop_timer = None
         try:
             self.player.stop()
         except Exception:
             pass
 
-    def play(self, audio_path, start_seconds=0, duration_seconds=5):
+    def play(self, audio_path, start_seconds=0):
         self.stop()
         audio_path = str(audio_path)
         try:
             self.player.play(audio_path)
             if start_seconds:
                 self.player.seek(max(0, float(start_seconds)), reference="absolute")
-            if duration_seconds is not None:
-                duration = max(0, float(duration_seconds))
-                self.stop_timer = threading.Timer(duration, self.stop)
-                self.stop_timer.daemon = True
-                self.stop_timer.start()
         except Exception as exc:
             raise RuntimeError(str(exc)) from exc
         return self.player
