@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from pydub import AudioSegment
+import simpleaudio as sa
+
 AUDIO_EXTS = {".mp3", ".flac", ".ogg", ".wav", ".m4a"}
 
 
@@ -10,6 +13,40 @@ class BrowserState:
     selected: int = 0
     scroll: int = 0
     show_hidden: bool = False
+
+
+class AudioPreviewPlayer:
+    def __init__(self):
+        self.current_playback = None
+
+    def stop(self):
+        if self.current_playback is not None:
+            self.current_playback.stop()
+            self.current_playback = None
+
+    def play(self, audio_path):
+        self.stop()
+        self.current_playback = play_audio_preview(audio_path)
+        return self.current_playback
+
+
+def play_audio_preview(audio_path, start_seconds=0, duration_seconds=5):
+    audio_path = str(audio_path)
+    try:
+        segment = AudioSegment.from_file(audio_path)
+    except Exception as exc:
+        raise RuntimeError(str(exc)) from exc
+
+    try:
+        playback = sa.play_buffer(
+            segment.raw_data,
+            num_channels=segment.channels,
+            bytes_per_sample=segment.sample_width,
+            sample_rate=segment.frame_rate,
+        )
+        return playback
+    except Exception as exc:
+        raise RuntimeError(str(exc)) from exc
 
 
 def list_entries(state: BrowserState):

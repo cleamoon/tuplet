@@ -49,3 +49,16 @@ def handle_key(
             scroll = 0
 
     return current_path, selected, scroll, show_hidden, action
+
+
+def handle_action(action, player):
+    if not action:
+        return None
+    action_type, payload = action
+    if action_type == "select_audio":
+        try:
+            player.play(payload)
+        except RuntimeError as exc:
+            return ("error", f"Error: {exc}")
+        return ("status", f"Playing preview: {payload.name}")
+    return None
