@@ -1,7 +1,30 @@
 from dataclasses import dataclass
 from pathlib import Path
+import ctypes
+import os
+import sys
 import threading
 
+
+def _load_local_mpv():
+    lib_dir = Path(__file__).resolve().parent / "libs"
+    if not lib_dir.is_dir():
+        return
+    if sys.platform.startswith("win"):
+        os.add_dll_directory(str(lib_dir))
+        candidates = ["mpv-2.dll", "mpv-1.dll", "libmpv-2.dll", "libmpv-1.dll"]
+    elif sys.platform == "darwin":
+        candidates = ["libmpv.dylib"]
+    else:
+        candidates = ["libmpv.so", "libmpv.so.2", "libmpv.so.1"]
+    for name in candidates:
+        lib_path = lib_dir / name
+        if lib_path.exists():
+            ctypes.CDLL(str(lib_path))
+            return
+
+
+_load_local_mpv()
 import mpv
 
 AUDIO_EXTS = {".mp3", ".flac", ".ogg", ".wav", ".m4a"}
