@@ -18,12 +18,12 @@ def handle_key(
     elif key in (curses.KEY_UP, ord('k')):
         if entries:
             selected = max(selected - 1, 0)
-    elif key == curses.KEY_NPAGE:  # Page Down
+    elif key == curses.KEY_NPAGE:
         if entries:
             page_size = max(1, visible_height)
             selected = min(selected + page_size, len(entries) - 1)
             scroll = min(scroll + page_size, max(0, len(entries) - visible_height))
-    elif key == curses.KEY_PPAGE:  # Page Up
+    elif key == curses.KEY_PPAGE:
         if entries:
             page_size = max(1, visible_height)
             selected = max(selected - page_size, 0)
