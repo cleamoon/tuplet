@@ -42,15 +42,18 @@ class BrowserState:
 class AudioPreviewPlayer:
     def __init__(self):
         self.player = mpv.MPV(video=False)
+        self.current_path = None
 
     def stop(self):
         try:
             self.player.stop()
         except Exception:
             pass
+        self.current_path = None
 
     def play(self, audio_path, start_seconds=0):
         self.stop()
+        self.current_path = Path(audio_path)
         audio_path = str(audio_path)
         try:
             self.player.play(audio_path)
@@ -59,6 +62,24 @@ class AudioPreviewPlayer:
         except Exception as exc:
             raise RuntimeError(str(exc)) from exc
         return self.player
+
+    def get_playback_info(self):
+        if not self.current_path:
+            return None, None, None
+        try:
+            eof_reached = self.player.eof_reached
+            playback_active = self.player.playback_active
+            time_pos = self.player.time_pos
+            duration = self.player.duration
+        except Exception:
+            eof_reached = None
+            playback_active = None
+            time_pos = None
+            duration = None
+        if eof_reached or (playback_active is False and time_pos is None):
+            self.current_path = None
+            return None, None, None
+        return self.current_path.name, time_pos, duration
 
 
 def list_entries(state: BrowserState):

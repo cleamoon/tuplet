@@ -11,7 +11,7 @@ from model import (
     clamp_selection,
     list_entries,
 )
-from view import get_visible_height, render_browser, show_status
+from view import get_visible_height, render_browser, show_info_bar, show_status
 
 
 def file_browser(stdscr, start_path: Path):
@@ -35,6 +35,8 @@ def file_browser(stdscr, start_path: Path):
             entries,
             visible_height,
         )
+        playing_name, time_pos, duration = player.get_playback_info()
+        show_info_bar(stdscr, playing_name, (time_pos, duration))
 
         key = stdscr.getch()
 
