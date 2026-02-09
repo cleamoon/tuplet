@@ -12,16 +12,18 @@ def _load_local_mpv():
         return
     if sys.platform.startswith("win"):
         os.add_dll_directory(str(lib_dir))
-        candidates = ["mpv-2.dll", "mpv-1.dll", "libmpv-2.dll", "libmpv-1.dll"]
     elif sys.platform == "darwin":
-        candidates = ["libmpv.dylib"]
+        if (lib_dir / "libmpv.dylib").exists():
+            existing = os.environ.get("DYLD_LIBRARY_PATH", "")
+            os.environ["DYLD_LIBRARY_PATH"] = (
+                str(lib_dir) + (":" + existing if existing else "")
+            )
     else:
-        candidates = ["libmpv.so", "libmpv.so.2", "libmpv.so.1"]
-    for name in candidates:
-        lib_path = lib_dir / name
-        if lib_path.exists():
-            ctypes.CDLL(str(lib_path))
-            return
+        if any((lib_dir / n).exists() for n in ("libmpv.so", "libmpv.so.2", "libmpv.so.1")):
+            existing = os.environ.get("LD_LIBRARY_PATH", "")
+            os.environ["LD_LIBRARY_PATH"] = (
+                str(lib_dir) + (":" + existing if existing else "")
+            )
 
 
 _load_local_mpv()
