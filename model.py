@@ -95,16 +95,12 @@ class AudioPreviewPlayer:
         if not self.current_path:
             return None, None, None
         try:
-            eof_reached = self.player.eof_reached
-            playback_active = self.player.playback_active
             time_pos = self.player.time_pos
             duration = self.player.duration
+            idle = self.player.idle_active
         except Exception:
-            eof_reached = None
-            playback_active = None
-            time_pos = None
-            duration = None
-        if eof_reached or (playback_active is False and time_pos is None):
+            return self.current_path.name, None, None
+        if idle:
             self.current_path = None
             return None, None, None
         return self.current_path.name, time_pos, duration
