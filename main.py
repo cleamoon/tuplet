@@ -4,7 +4,6 @@ from pathlib import Path
 
 from controller import handle_action, handle_key
 from model import (
-    AUDIO_EXTS,
     AudioPreviewPlayer,
     BrowserState,
     build_display,
@@ -18,6 +17,7 @@ def file_browser(stdscr, start_path: Path):
     curses.curs_set(0)
     state = BrowserState(current_path=start_path)
     player = AudioPreviewPlayer()
+    status_msg = None
 
     while True:
         entries, has_parent = list_entries(state)
@@ -38,7 +38,22 @@ def file_browser(stdscr, start_path: Path):
         playing_name, time_pos, duration = player.get_playback_info()
         show_info_bar(stdscr, playing_name, (time_pos, duration))
 
+        if status_msg:
+            show_status(stdscr, status_msg)
+            status_msg = None
+
+        pending = player.poll_pending()
+        if pending:
+            level, message = pending
+            show_status(stdscr, message)
+            if level == "error":
+                stdscr.timeout(-1)
+                stdscr.getch()
+
+        stdscr.timeout(200)
         key = stdscr.getch()
+        if key == -1:
+            continue
 
         if key in (ord('q'), 27):  # q or ESC to quit
             player.stop()
@@ -52,14 +67,10 @@ def file_browser(stdscr, start_path: Path):
                 state.scroll,
                 visible_height,
                 state.show_hidden,
-                AUDIO_EXTS,
             )
             result = handle_action(action, player)
             if result:
-                level, message = result
-                show_status(stdscr, message)
-                if level == "error":
-                    stdscr.getch()
+                _, status_msg = result
 
 
 def parse_args() -> argparse.Namespace:

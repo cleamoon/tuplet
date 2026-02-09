@@ -37,6 +37,8 @@ class AudioPreviewPlayer:
     def __init__(self):
         self.player = mpv.MPV(video=False)
         self.current_path = None
+        self._pending_result = None  # ("status"|"error", message) set by background probe
+        self._probe_lock = threading.Lock()
 
     def stop(self):
         try:
@@ -56,6 +58,42 @@ class AudioPreviewPlayer:
         except Exception as exc:
             raise RuntimeError(str(exc)) from exc
         return self.player
+
+    def try_play(self, file_path, start_seconds=0):
+        file_path = Path(file_path)
+        with self._probe_lock:
+            self._pending_result = None
+
+        def _probe():
+            probe = mpv.MPV(video=False, vo="null", ao="null")
+            try:
+                probe.play(str(file_path))
+                probe.wait_until_playing(timeout=3)
+            except Exception as exc:
+                with self._probe_lock:
+                    self._pending_result = ("error", f"Cannot play {file_path.name}: {exc}")
+                return
+            finally:
+                try:
+                    probe.terminate()
+                except Exception:
+                    pass
+            try:
+                self.play(file_path, start_seconds=start_seconds)
+                with self._probe_lock:
+                    self._pending_result = ("status", f"Playing preview: {file_path.name}")
+            except Exception as exc:
+                with self._probe_lock:
+                    self._pending_result = ("error", f"Error: {exc}")
+
+        thread = threading.Thread(target=_probe, daemon=True)
+        thread.start()
+
+    def poll_pending(self):
+        with self._probe_lock:
+            result = self._pending_result
+            self._pending_result = None
+        return result
 
     def get_playback_info(self):
         if not self.current_path:

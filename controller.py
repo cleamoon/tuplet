@@ -9,7 +9,6 @@ def handle_key(
     scroll,
     visible_height,
     show_hidden,
-    audio_exts,
 ):
     action = None
     if key in (curses.KEY_DOWN, ord('j')):
@@ -39,7 +38,7 @@ def handle_key(
                 current_path = chosen
                 selected = 0
                 scroll = 0
-            elif chosen.suffix.lower() in audio_exts:
+            elif chosen.is_file():
                 action = ("select_audio", chosen)
     elif key == curses.KEY_BACKSPACE or key == 127:
         parent = current_path.parent
@@ -56,9 +55,6 @@ def handle_action(action, player):
         return None
     action_type, payload = action
     if action_type == "select_audio":
-        try:
-            player.play(payload)
-        except RuntimeError as exc:
-            return ("error", f"Error: {exc}")
-        return ("status", f"Playing preview: {payload.name}")
+        player.try_play(payload)
+        return ("status", f"Loading: {payload.name}")
     return None
