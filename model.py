@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from pathlib import Path
-import ctypes
 import os
 import sys
 import threading
@@ -21,9 +20,6 @@ def _load_local_mpv():
 _load_local_mpv()
 
 import mpv
-
-AUDIO_EXTS = {".mp3", ".flac", ".ogg", ".wav", ".m4a"}
-
 
 @dataclass
 class BrowserState:
