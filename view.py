@@ -2,7 +2,8 @@ import curses
 
 AUDIO_EXTENSIONS = {
     ".mp3", ".flac", ".wav", ".ogg", ".m4a", ".aac",
-    ".wma", ".opus", ".aiff", ".ape", ".alac", ".mp4",
+    ".wma", ".opus", ".aiff", ".ape", ".alac", 
+    ".mp4", ".mkv", ".webm", ".avi", ".mov", ".mpg", ".mpeg",
 }
 
 CP_HEADER = 1
