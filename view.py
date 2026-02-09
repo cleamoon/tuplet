@@ -32,7 +32,6 @@ def _cp(pair, extra=0):
 
 
 def _write_segments(stdscr, line, max_x, segments):
-    """Write [(text, attr), ...] segments sequentially on *line*."""
     col = 0
     for text, attr in segments:
         if col >= max_x:
@@ -103,8 +102,11 @@ def show_status(stdscr, message):
 def _format_time(seconds):
     if seconds is None:
         return "--:--"
-    seconds = max(0, int(seconds))
-    minutes, secs = divmod(seconds, 60)
+    try:
+        total = max(0, int(float(seconds)))
+    except (ValueError, TypeError, OverflowError):
+        return "--:--"
+    minutes, secs = divmod(total, 60)
     hours, minutes = divmod(minutes, 60)
     if hours:
         return f"{hours:d}:{minutes:02d}:{secs:02d}"
