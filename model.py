@@ -27,6 +27,14 @@ class BrowserState:
     selected: int = 0
     scroll: int = 0
     show_hidden: bool = False
+    playlist: list = None          # list of Path objects
+    playlist_selected: int = 0
+    playlist_scroll: int = 0
+    active_pane: str = "browser"   # "browser" or "playlist"
+
+    def __post_init__(self):
+        if self.playlist is None:
+            self.playlist = []
 
 
 class AudioPreviewPlayer:
@@ -139,3 +147,15 @@ def clamp_selection(selected, scroll, visible_height, entries):
     elif selected >= scroll + visible_height:
         scroll = max(0, selected - visible_height + 1)
     return selected, scroll
+
+
+def clamp_playlist_selection(state, visible_height):
+    if not state.playlist:
+        state.playlist_selected = 0
+        state.playlist_scroll = 0
+        return
+    state.playlist_selected = min(state.playlist_selected, len(state.playlist) - 1)
+    if state.playlist_selected < state.playlist_scroll:
+        state.playlist_scroll = state.playlist_selected
+    elif state.playlist_selected >= state.playlist_scroll + visible_height:
+        state.playlist_scroll = max(0, state.playlist_selected - visible_height + 1)

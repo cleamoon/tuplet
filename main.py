@@ -7,6 +7,7 @@ from model import (
     AudioPreviewPlayer,
     BrowserState,
     build_display,
+    clamp_playlist_selection,
     clamp_selection,
     list_entries,
 )
@@ -27,6 +28,7 @@ def file_browser(stdscr, start_path: Path):
         state.selected, state.scroll = clamp_selection(
             state.selected, state.scroll, visible_height, entries
         )
+        clamp_playlist_selection(state, visible_height)
         render_browser(
             stdscr,
             state.current_path,
@@ -35,6 +37,10 @@ def file_browser(stdscr, start_path: Path):
             state.scroll,
             entries,
             visible_height,
+            state.active_pane,
+            state.playlist,
+            state.playlist_selected,
+            state.playlist_scroll,
         )
         playing_name, time_pos, duration = player.get_playback_info()
         show_info_bar(stdscr, playing_name, (time_pos, duration))
@@ -60,15 +66,7 @@ def file_browser(stdscr, start_path: Path):
             player.stop()
             break
         else:
-            state.current_path, state.selected, state.scroll, state.show_hidden, action = handle_key(
-                key,
-                entries,
-                state.current_path,
-                state.selected,
-                state.scroll,
-                visible_height,
-                state.show_hidden,
-            )
+            action = handle_key(key, entries, state, visible_height)
             result = handle_action(action, player)
             if result:
                 _, status_msg = result

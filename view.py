@@ -2,7 +2,7 @@ import curses
 
 AUDIO_EXTENSIONS = {
     ".mp3", ".flac", ".wav", ".ogg", ".m4a", ".aac",
-    ".wma", ".opus", ".aiff", ".ape", ".alac", 
+    ".wma", ".opus", ".aiff", ".ape", ".alac",
     ".mp4", ".mkv", ".webm", ".avi", ".mov", ".mpg", ".mpeg",
 }
 
@@ -13,6 +13,7 @@ CP_GREEN = 4
 CP_STATUS = 5
 CP_SONGNAME = 6
 CP_BAR = 7
+CP_INACTIVE_SEL = 8
 
 
 def init_colors():
@@ -25,6 +26,7 @@ def init_colors():
     curses.init_pair(CP_STATUS, curses.COLOR_YELLOW, -1)
     curses.init_pair(CP_SONGNAME, curses.COLOR_MAGENTA, -1)
     curses.init_pair(CP_BAR, curses.COLOR_BLACK, curses.COLOR_GREEN)
+    curses.init_pair(CP_INACTIVE_SEL, curses.COLOR_WHITE, curses.COLOR_BLACK)
 
 
 def _cp(pair, extra=0):
@@ -46,24 +48,54 @@ def get_visible_height(stdscr):
     return max(0, max_y - 3)
 
 
-def render_browser(stdscr, current_path, display, selected, scroll, entries, visible_height):
+def render_browser(stdscr, current_path, display, selected, scroll, entries,
+                   visible_height, active_pane, playlist, playlist_selected,
+                   playlist_scroll):
+    """Render the split-pane view: file browser on the left, playlist on the right."""
     stdscr.clear()
     max_y, max_x = stdscr.getmaxyx()
 
-    header = f" Browsing: {current_path} "
-    stdscr.addstr(0, 0, header[: max_x - 1], _cp(CP_HEADER, curses.A_BOLD))
+    # ── Column widths ─────────────────────────────────────────────────
+    divider_col = max(10, (max_x * 2) // 3)
+    browser_width = divider_col - 2          # usable text width in browser pane
+    playlist_left = divider_col + 1          # starting x for playlist text
+    playlist_width = max(0, max_x - playlist_left - 1)  # usable text width in playlist pane
 
+    browser_is_active = active_pane == "browser"
+
+    # ── Headers ───────────────────────────────────────────────────────
+    browser_header = f" Browsing: {current_path} "
+    playlist_header = f" Playlist ({len(playlist)} items) "
+    br_attr = _cp(CP_HEADER, curses.A_BOLD | (curses.A_UNDERLINE if browser_is_active else 0))
+    pl_attr = _cp(CP_HEADER, curses.A_BOLD | (curses.A_UNDERLINE if not browser_is_active else 0))
+
+    stdscr.addstr(0, 0, browser_header[: browser_width + 2], br_attr)
+    if playlist_left < max_x:
+        stdscr.addstr(0, playlist_left, playlist_header[: playlist_width], pl_attr)
+
+    # ── Divider line ──────────────────────────────────────────────────
+    for row in range(0, max_y - 2):
+        if divider_col < max_x:
+            try:
+                stdscr.addch(row, divider_col, curses.ACS_VLINE, curses.A_DIM)
+            except curses.error:
+                pass
+
+    # ── Browser pane ──────────────────────────────────────────────────
     if not entries:
         stdscr.addstr(1, 2, "(empty)", curses.A_DIM)
     else:
         end = min(len(display), scroll + visible_height)
         for row, idx in enumerate(range(scroll, end), start=1):
-            text = display[idx][: max_x - 4]
+            text = display[idx][: browser_width]
             entry = entries[idx]
 
             if idx == selected:
-                text = text.ljust(max_x - 4)
-                attr = _cp(CP_SELECTED, curses.A_BOLD)
+                text = text.ljust(browser_width)
+                if browser_is_active:
+                    attr = _cp(CP_SELECTED, curses.A_BOLD)
+                else:
+                    attr = _cp(CP_INACTIVE_SEL)
             elif entry.is_dir():
                 attr = _cp(CP_DIR, curses.A_BOLD)
             elif entry.suffix.lower() in AUDIO_EXTENSIONS:
@@ -71,7 +103,40 @@ def render_browser(stdscr, current_path, display, selected, scroll, entries, vis
             else:
                 attr = curses.A_NORMAL
 
-            stdscr.addstr(row, 2, text, attr)
+            try:
+                stdscr.addstr(row, 2, text, attr)
+            except curses.error:
+                pass
+
+    # ── Playlist pane ─────────────────────────────────────────────────
+    if not playlist:
+        if playlist_left + 2 < max_x:
+            try:
+                stdscr.addstr(1, playlist_left, "(empty)"[: playlist_width], curses.A_DIM)
+            except curses.error:
+                pass
+    else:
+        end = min(len(playlist), playlist_scroll + visible_height)
+        for row, idx in enumerate(range(playlist_scroll, end), start=1):
+            num = f"{idx + 1:>3}. "
+            name = playlist[idx].name
+            text = (num + name)[: playlist_width]
+
+            if idx == playlist_selected:
+                text = text.ljust(playlist_width)
+                if not browser_is_active:
+                    attr = _cp(CP_SELECTED, curses.A_BOLD)
+                else:
+                    attr = _cp(CP_INACTIVE_SEL)
+            elif playlist[idx].suffix.lower() in AUDIO_EXTENSIONS:
+                attr = _cp(CP_GREEN)
+            else:
+                attr = curses.A_NORMAL
+
+            try:
+                stdscr.addstr(row, playlist_left, text, attr)
+            except curses.error:
+                pass
 
     stdscr.refresh()
 
