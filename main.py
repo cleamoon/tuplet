@@ -43,6 +43,29 @@ def file_browser(stdscr, start_path: Path):
             state.playlist_scroll,
         )
         playing_name, time_pos, duration = player.get_playback_info()
+
+        # ── Autoplay next item in playlist when one finishes ───────────
+        if (
+            state.playing_from_playlist
+            and state.active_pane == "playlist"
+            and state.was_playing
+            and playing_name is None
+            and state.playlist
+        ):
+            next_index = state.playing_index + 1
+            if 0 <= next_index < len(state.playlist):
+                state.playing_index = next_index
+                state.playlist_selected = next_index
+                clamp_playlist_selection(state, visible_height)
+                next_path = state.playlist[next_index]
+                result = handle_action(("select_audio", next_path), player)
+                if result:
+                    _, status_msg = result
+            else:
+                # reached end of playlist; stop autoplay
+                state.playing_from_playlist = False
+                state.playing_index = -1
+
         show_info_bar(stdscr, playing_name, (time_pos, duration))
 
         if status_msg:
@@ -56,6 +79,9 @@ def file_browser(stdscr, start_path: Path):
             if level == "error":
                 stdscr.timeout(-1)
                 stdscr.getch()
+
+        # remember whether we were playing this frame (for next iteration)
+        state.was_playing = playing_name is not None
 
         stdscr.timeout(200)
         key = stdscr.getch()

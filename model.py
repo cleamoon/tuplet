@@ -31,6 +31,9 @@ class BrowserState:
     playlist_selected: int = 0
     playlist_scroll: int = 0
     active_pane: str = "browser"   # "browser" or "playlist"
+    playing_from_playlist: bool = False
+    playing_index: int = -1
+    was_playing: bool = False
 
     def __post_init__(self):
         if self.playlist is None:

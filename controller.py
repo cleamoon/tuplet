@@ -35,9 +35,21 @@ def handle_key(key, entries, state, visible_height):
     # ── 'd' / DEL: remove item from playlist (only in playlist pane) ─
     if key in (ord('d'), ord('x'), curses.KEY_DC) and state.active_pane == "playlist":
         if state.playlist:
-            removed = state.playlist.pop(state.playlist_selected)
+            removed_index = state.playlist_selected
+            removed = state.playlist.pop(removed_index)
             if state.playlist_selected >= len(state.playlist) and state.playlist:
                 state.playlist_selected = len(state.playlist) - 1
+
+            # keep autoplay state consistent with removals
+            if not state.playlist:
+                state.playing_from_playlist = False
+                state.playing_index = -1
+            elif state.playing_from_playlist:
+                if removed_index < state.playing_index:
+                    state.playing_index -= 1
+                elif removed_index == state.playing_index:
+                    state.playing_from_playlist = False
+                    state.playing_index = -1
             action = ("status", f"Removed: {removed.name}")
         return action
 
@@ -80,6 +92,8 @@ def _handle_browser_nav(key, entries, state, visible_height):
                 state.selected = 0
                 state.scroll = 0
             elif chosen.is_file():
+                state.playing_from_playlist = False
+                state.playing_index = -1
                 action = ("select_audio", chosen)
     elif key == curses.KEY_BACKSPACE or key == 127:
         parent = state.current_path.parent
@@ -109,6 +123,8 @@ def _handle_playlist_nav(key, state, visible_height):
         state.playlist_selected = max(state.playlist_selected - page_size, 0)
         state.playlist_scroll = max(state.playlist_scroll - page_size, 0)
     elif key in (curses.KEY_ENTER, ord('\n')):
+        state.playing_from_playlist = True
+        state.playing_index = state.playlist_selected
         chosen = state.playlist[state.playlist_selected]
         action = ("select_audio", chosen)
 
