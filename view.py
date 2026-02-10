@@ -91,7 +91,6 @@ def render_browser(stdscr, current_path, display, selected, scroll, entries,
             entry = entries[idx]
 
             if idx == selected:
-                text = text.ljust(browser_width)
                 if browser_is_active:
                     attr = _cp(CP_SELECTED, curses.A_BOLD)
                 else:
@@ -123,7 +122,6 @@ def render_browser(stdscr, current_path, display, selected, scroll, entries,
             text = (num + name)[: playlist_width]
 
             if idx == playlist_selected:
-                text = text.ljust(playlist_width)
                 if not browser_is_active:
                     attr = _cp(CP_SELECTED, curses.A_BOLD)
                 else:
