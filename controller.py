@@ -1,18 +1,6 @@
 import curses
 from view import AUDIO_EXTENSIONS
 
-# Play/pause key codes across platforms (Space + media keys when forwarded by terminal).
-# Linux/X11:  XF86AudioPlay, XF86AudioPause
-# Wayland:    same XKB keysyms when compositor/terminal forwards media keys
-# Windows:    VK_MEDIA_PLAY_PAUSE (0xB3)
-# macOS:      system often captures media keys; Space is reliable; XF86 codes
-#             below are still checked in case a terminal (e.g. iTerm2) forwards them
-MEDIA_PLAY_PAUSE_KEYS = frozenset((
-    ord(' '),                    # Space (works everywhere)
-    0x1008FF14,                  # XF86AudioPlay (Linux/X11, Wayland)
-    0x1008FF31,                  # XF86AudioPause (Linux/X11, Wayland)
-    0xB3,                        # VK_MEDIA_PLAY_PAUSE (Windows)
-))
 def handle_key(key, entries, state, visible_height):
     """Process a key press and return an action (or None).
 
@@ -22,7 +10,7 @@ def handle_key(key, entries, state, visible_height):
     action = None
 
     # ── Media keys / Space: play-pause toggle ─────────────────────────
-    if key in MEDIA_PLAY_PAUSE_KEYS:
+    if key == ord(' '):
         return ("toggle_play_pause",)
 
     # ── Tab: switch pane ──────────────────────────────────────────────
