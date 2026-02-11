@@ -71,22 +71,29 @@ def handle_key(key, entries, state, visible_height):
 
 def _handle_browser_nav(key, entries, state, visible_height):
     action = None
+    count = len(entries)
+    max_index = max(0, count - 1)
+
     if key in (curses.KEY_DOWN, ord('j')):
         if entries:
-            state.selected = min(state.selected + 1, len(entries) - 1)
+            state.selected = min(state.selected + 1, max_index)
+            save_state(state)
     elif key in (curses.KEY_UP, ord('k')):
         if entries:
             state.selected = max(state.selected - 1, 0)
+            save_state(state)
     elif key == curses.KEY_NPAGE:
         if entries:
             page_size = max(1, visible_height)
-            state.selected = min(state.selected + page_size, len(entries) - 1)
-            state.scroll = min(state.scroll + page_size, max(0, len(entries) - visible_height))
+            state.selected = min(state.selected + page_size, max_index)
+            state.scroll = min(state.scroll + page_size, max(0, count - visible_height))
+            save_state(state)
     elif key == curses.KEY_PPAGE:
         if entries:
             page_size = max(1, visible_height)
             state.selected = max(state.selected - page_size, 0)
             state.scroll = max(state.scroll - page_size, 0)
+            save_state(state)
     elif key in (ord('h'), ord('H')):
         state.show_hidden = not state.show_hidden
         state.selected = 0

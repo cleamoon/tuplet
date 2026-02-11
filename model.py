@@ -197,6 +197,14 @@ def load_persisted_state_into(state: BrowserState) -> None:
         if dir_path.is_dir():
             state.current_path = dir_path
 
+    # Restore browser position (clamped when entries are known in main loop)
+    saved_selected = data.get("browser_selected")
+    if isinstance(saved_selected, int) and saved_selected >= 0:
+        state.selected = saved_selected
+    saved_scroll = data.get("browser_scroll")
+    if isinstance(saved_scroll, int) and saved_scroll >= 0:
+        state.scroll = saved_scroll
+
     # Restore last playing file path (for display/consistency; no auto-resume)
     saved_playing = data.get("current_playing_file")
     if isinstance(saved_playing, str):
@@ -229,6 +237,8 @@ def save_state(state: BrowserState) -> None:
             "playlist": [str(p) for p in state.playlist],
             "current_directory": str(state.current_path.resolve()),
             "current_playing_file": str(state.last_playing_path) if state.last_playing_path else None,
+            "browser_selected": state.selected,
+            "browser_scroll": state.scroll,
         }
         STATE_FILE.write_text(json.dumps(data))
     except Exception:
