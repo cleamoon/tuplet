@@ -1,4 +1,5 @@
 import curses
+import unicodedata
 
 AUDIO_EXTENSIONS = {
     ".mp3", ".flac", ".wav", ".ogg", ".m4a", ".aac",
@@ -33,6 +34,24 @@ def color_pair(pair, extra=0):
     return curses.color_pair(pair) | extra
 
 
+def _cell_width(c: str) -> int:
+    """Return terminal cell width for one character (1 for narrow, 2 for wide/CJK)."""
+    if not c:
+        return 0
+    ea = unicodedata.east_asian_width(c)
+    return 2 if ea in ("F", "W") else 1
+
+
+def _truncate_to_width(s: str, max_width: int) -> str:
+    """Truncate string so its terminal display width is at most max_width."""
+    w = 0
+    for i, c in enumerate(s):
+        cw = _cell_width(c)
+        if w + cw > max_width:
+            return s[:i]
+        w += cw
+    return s
+
 
 def get_visible_height(stdscr):
     max_y, _ = stdscr.getmaxyx()
@@ -60,9 +79,9 @@ def render_browser(stdscr, current_path, display, selected, scroll, entries,
     br_attr = color_pair(CP_HEADER, curses.A_BOLD | (curses.A_UNDERLINE if browser_is_active else 0))
     pl_attr = color_pair(CP_HEADER, curses.A_BOLD | (curses.A_UNDERLINE if not browser_is_active else 0))
 
-    stdscr.addstr(0, 0, browser_header[: browser_width + 2], br_attr)
+    stdscr.addstr(0, 0, _truncate_to_width(browser_header, browser_width + 2), br_attr)
     if playlist_left < max_x:
-        stdscr.addstr(0, playlist_left, playlist_header[: playlist_width], pl_attr)
+        stdscr.addstr(0, playlist_left, _truncate_to_width(playlist_header, playlist_width), pl_attr)
 
     # ── Divider line ──────────────────────────────────────────────────
     for row in range(0, max_y - 2):
@@ -78,7 +97,7 @@ def render_browser(stdscr, current_path, display, selected, scroll, entries,
     else:
         end = min(len(display), scroll + visible_height)
         for row, idx in enumerate(range(scroll, end), start=1):
-            text = display[idx][: browser_width]
+            text = _truncate_to_width(display[idx], browser_width)
             entry = entries[idx]
 
             if idx == selected:
@@ -110,7 +129,7 @@ def render_browser(stdscr, current_path, display, selected, scroll, entries,
         for row, idx in enumerate(range(playlist_scroll, end), start=1):
             num = f"{idx + 1:>3}. "
             name = playlist[idx].name
-            text = (num + name)[: playlist_width]
+            text = _truncate_to_width(num + name, playlist_width)
 
             if idx == playlist_selected:
                 if not browser_is_active:
