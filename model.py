@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
 import json
@@ -38,6 +40,7 @@ class BrowserState:
     playing_from_playlist: bool = False
     playing_index: int = -1
     was_playing: bool = False
+    last_playing_path: Path | None = None  # path of currently/last playing file (for persistence)
 
     def __post_init__(self):
         if self.playlist is None:
@@ -178,7 +181,7 @@ def clamp_playlist_selection(state, visible_height):
 
 
 def load_persisted_state_into(state: BrowserState) -> None:
-    """Load previously saved state (currently just the playlist) into *state*."""
+    """Load previously saved state (playlist, current directory, last playing file) into *state*."""
     if not STATE_FILE.exists():
         return
     try:
@@ -186,6 +189,20 @@ def load_persisted_state_into(state: BrowserState) -> None:
     except Exception:
         # Corrupt or unreadable state file; ignore
         return
+
+    # Restore last open directory
+    saved_dir = data.get("current_directory")
+    if isinstance(saved_dir, str):
+        dir_path = Path(saved_dir).expanduser().resolve()
+        if dir_path.is_dir():
+            state.current_path = dir_path
+
+    # Restore last playing file path (for display/consistency; no auto-resume)
+    saved_playing = data.get("current_playing_file")
+    if isinstance(saved_playing, str):
+        playing_path = Path(saved_playing).expanduser()
+        if playing_path.exists():
+            state.last_playing_path = playing_path
 
     playlist_paths = data.get("playlist", [])
     if not isinstance(playlist_paths, list):
@@ -206,10 +223,12 @@ def load_persisted_state_into(state: BrowserState) -> None:
 
 
 def save_state(state: BrowserState) -> None:
-    """Persist current state (currently just the playlist) to the hidden JSON file."""
+    """Persist current state (playlist, current directory, current playing file) to the hidden JSON file."""
     try:
         data = {
             "playlist": [str(p) for p in state.playlist],
+            "current_directory": str(state.current_path.resolve()),
+            "current_playing_file": str(state.last_playing_path) if state.last_playing_path else None,
         }
         STATE_FILE.write_text(json.dumps(data))
     except Exception:

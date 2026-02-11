@@ -61,6 +61,8 @@ def file_browser(stdscr, start_path: Path):
                 state.playlist_selected = next_index
                 clamp_playlist_selection(state, visible_height)
                 next_path = state.playlist[next_index]
+                state.last_playing_path = next_path
+                save_state(state)
                 result = handle_action(("select_audio", next_path), player)
                 if result:
                     _, status_msg = result
@@ -97,6 +99,9 @@ def file_browser(stdscr, start_path: Path):
             break
         else:
             action = handle_key(key, entries, state, visible_height)
+            if action and action[0] == "select_audio":
+                state.last_playing_path = action[1]
+                save_state(state)
             result = handle_action(action, player)
             if result:
                 _, status_msg = result

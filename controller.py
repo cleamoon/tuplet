@@ -98,6 +98,7 @@ def _handle_browser_nav(key, entries, state, visible_height):
                 state.current_path = chosen
                 state.selected = 0
                 state.scroll = 0
+                save_state(state)
             elif chosen.is_file():
                 state.playing_from_playlist = False
                 state.playing_index = -1
@@ -108,6 +109,7 @@ def _handle_browser_nav(key, entries, state, visible_height):
             state.current_path = parent
             state.selected = 0
             state.scroll = 0
+            save_state(state)
     return action
 
 
