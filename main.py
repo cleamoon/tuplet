@@ -1,5 +1,6 @@
 import argparse
 import curses
+import json
 from pathlib import Path
 
 from controller import handle_action, handle_key
@@ -14,10 +15,55 @@ from model import (
 from view import get_visible_height, init_colors, render_browser, show_info_bar, show_status
 
 
+# Hidden state file under the user's home directory
+STATE_FILE = Path.home() / ".tuplet_tui_audio_player.json"
+
+
+def _load_persisted_state_into(state: BrowserState) -> None:
+    """Load previously saved state (currently just the playlist) into *state*."""
+    if not STATE_FILE.exists():
+        return
+    try:
+        data = json.loads(STATE_FILE.read_text())
+    except Exception:
+        # Corrupt or unreadable state file; ignore
+        return
+
+    playlist_paths = data.get("playlist", [])
+    if not isinstance(playlist_paths, list):
+        return
+
+    playlist = []
+    for item in playlist_paths:
+        if not isinstance(item, str):
+            continue
+        path = Path(item).expanduser()
+        if path.exists():
+            playlist.append(path)
+
+    if playlist:
+        state.playlist = playlist
+        state.playlist_selected = 0
+        state.playlist_scroll = 0
+
+
+def _save_state(state: BrowserState) -> None:
+    """Persist current state (currently just the playlist) to the hidden JSON file."""
+    try:
+        data = {
+            "playlist": [str(p) for p in state.playlist],
+        }
+        STATE_FILE.write_text(json.dumps(data))
+    except Exception:
+        # Never let persistence errors crash the TUI
+        pass
+
+
 def file_browser(stdscr, start_path: Path):
     curses.curs_set(0)
     init_colors()
     state = BrowserState(current_path=start_path)
+    _load_persisted_state_into(state)
     player = AudioPreviewPlayer()
     status_msg = None
 
@@ -89,6 +135,7 @@ def file_browser(stdscr, start_path: Path):
             continue
 
         if key in (ord('q'), 27):  # q or ESC to quit
+            _save_state(state)
             player.stop()
             break
         else:
