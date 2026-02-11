@@ -1,4 +1,5 @@
 import curses
+from model import save_state
 from view import AUDIO_EXTENSIONS
 
 def handle_key(key, entries, state, visible_height):
@@ -28,6 +29,7 @@ def handle_key(key, entries, state, visible_height):
             if chosen.is_file() and chosen.suffix.lower() in AUDIO_EXTENSIONS:
                 if chosen not in state.playlist:
                     state.playlist.append(chosen)
+                    save_state(state)
                     action = ("status", f"Added to playlist: {chosen.name}")
                 else:
                     action = ("status", f"Already in playlist: {chosen.name}")
@@ -53,6 +55,8 @@ def handle_key(key, entries, state, visible_height):
                 elif removed_index == state.playing_index:
                     state.playing_from_playlist = False
                     state.playing_index = -1
+
+            save_state(state)
             action = ("status", f"Removed: {removed.name}")
         return action
 
