@@ -54,6 +54,15 @@ class AudioPreviewPlayer:
             pass
         self.current_path = None
 
+    def toggle_pause(self):
+        """Pause if playing, resume if paused. No-op if nothing loaded."""
+        if not self.current_path:
+            return
+        try:
+            self.player.pause = not self.player.pause
+        except Exception:
+            pass
+
     def play(self, audio_path, start_seconds=0):
         self.stop()
         self.current_path = Path(audio_path)

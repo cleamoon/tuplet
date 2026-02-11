@@ -1,7 +1,18 @@
 import curses
 from view import AUDIO_EXTENSIONS
 
-
+# Play/pause key codes across platforms (Space + media keys when forwarded by terminal).
+# Linux/X11:  XF86AudioPlay, XF86AudioPause
+# Wayland:    same XKB keysyms when compositor/terminal forwards media keys
+# Windows:    VK_MEDIA_PLAY_PAUSE (0xB3)
+# macOS:      system often captures media keys; Space is reliable; XF86 codes
+#             below are still checked in case a terminal (e.g. iTerm2) forwards them
+MEDIA_PLAY_PAUSE_KEYS = frozenset((
+    ord(' '),                    # Space (works everywhere)
+    0x1008FF14,                  # XF86AudioPlay (Linux/X11, Wayland)
+    0x1008FF31,                  # XF86AudioPause (Linux/X11, Wayland)
+    0xB3,                        # VK_MEDIA_PLAY_PAUSE (Windows)
+))
 def handle_key(key, entries, state, visible_height):
     """Process a key press and return an action (or None).
 
@@ -9,6 +20,10 @@ def handle_key(key, entries, state, visible_height):
     Returns an optional action tuple, e.g. ("select_audio", path).
     """
     action = None
+
+    # ── Media keys / Space: play-pause toggle ─────────────────────────
+    if key in MEDIA_PLAY_PAUSE_KEYS:
+        return ("toggle_play_pause",)
 
     # ── Tab: switch pane ──────────────────────────────────────────────
     if key == ord('\t'):
@@ -134,10 +149,14 @@ def _handle_playlist_nav(key, state, visible_height):
 def handle_action(action, player):
     if not action:
         return None
-    action_type, payload = action
+    action_type = action[0]
+    payload = action[1] if len(action) > 1 else None
     if action_type == "select_audio":
         player.try_play(payload)
         return ("status", f"Loading: {payload.name}")
+    if action_type == "toggle_play_pause":
+        player.toggle_pause()
+        return None  # status shown via playback info bar
     if action_type == "status":
         return ("status", payload)
     return None
