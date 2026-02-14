@@ -4,11 +4,12 @@ from pathlib import Path
 
 from controller import handle_action, handle_key
 from model import (
-    AudioPreviewPlayer,
     BrowserState,
     build_display,
     clamp_playlist_selection,
     clamp_selection,
+    DaemonPlayer,
+    ensure_daemon_running,
     list_entries,
     load_persisted_state_into,
     save_state,
@@ -19,9 +20,11 @@ from view import get_visible_height, init_colors, render_browser, show_info_bar,
 def file_browser(stdscr, start_path: Path):
     curses.curs_set(0)
     init_colors()
+    if not ensure_daemon_running():
+        raise SystemExit("Could not start or connect to playback daemon.")
     state = BrowserState(current_path=start_path)
     load_persisted_state_into(state)
-    player = AudioPreviewPlayer()
+    player = DaemonPlayer()
     status_msg = None
 
     while True:
@@ -93,9 +96,12 @@ def file_browser(stdscr, start_path: Path):
         if key == -1:
             continue
 
-        if key in (ord('q'), 27):  # q or ESC to quit
+        if key == ord('Q'):  # Shift+Q: full quit, stop daemon and playback
             save_state(state)
-            player.stop()
+            player.quit_daemon()
+            break
+        if key in (ord('q'), 27):  # q or ESC: exit TUI only, daemon keeps playing
+            save_state(state)
             break
         else:
             action = handle_key(key, entries, state, visible_height)

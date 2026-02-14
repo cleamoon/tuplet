@@ -4,8 +4,45 @@ from dataclasses import dataclass
 from pathlib import Path
 import json
 import os
+import socket
+import subprocess
 import sys
 import threading
+import time
+
+DAEMON_SOCKET_PATH = Path.home() / ".tuplet_tui_audio_player.sock"
+
+
+def ensure_daemon_running():
+    """Connect to the playback daemon; if not running, start it and retry."""
+    for _ in range(2):
+        try:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(1.0)
+            s.connect(str(DAEMON_SOCKET_PATH))
+            s.sendall(b"GET_INFO\n")
+            s.recv(4096)
+            s.close()
+            return True
+        except (socket.error, OSError):
+            pass
+        # Start daemon
+        root = Path(__file__).resolve().parent
+        daemon_py = root / "daemon.py"
+        if not daemon_py.is_file():
+            return False
+        try:
+            subprocess.Popen(
+                [sys.executable, str(daemon_py)],
+                cwd=str(root),
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception:
+            return False
+        time.sleep(0.4)
+    return False
 
 
 def _load_local_mpv():
@@ -133,6 +170,81 @@ class AudioPreviewPlayer:
         return self.current_path.name, time_pos, duration
 
 
+class DaemonPlayer:
+    """Proxy to the background daemon so playback continues after the TUI exits."""
+
+    def __init__(self):
+        self._pending_result = None  # ("status"|"error", message)
+        self._lock = threading.Lock()
+
+    def _send(self, msg: str) -> str:
+        try:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(3.0)
+            s.connect(str(DAEMON_SOCKET_PATH))
+            s.sendall((msg + "\n").encode("utf-8"))
+            buf = b""
+            while b"\n" not in buf and len(buf) < 8192:
+                chunk = s.recv(4096)
+                if not chunk:
+                    break
+                buf += chunk
+            s.close()
+            return buf.decode("utf-8", errors="replace").split("\n")[0].strip()
+        except Exception as e:
+            return f"ERROR {e}"
+
+    def stop(self):
+        self._send("STOP")
+
+    def quit_daemon(self):
+        """Tell the daemon to exit and stop playback (full quit)."""
+        self._send("QUIT")
+
+    def toggle_pause(self):
+        self._send("PAUSE")
+
+    def play(self, audio_path, start_seconds=0):
+        path = str(Path(audio_path).resolve())
+        reply = self._send(f"PLAY\t{path}\t{start_seconds}")
+        if reply.startswith("ERROR"):
+            raise RuntimeError(reply[6:].strip())
+        return None
+
+    def try_play(self, file_path, start_seconds=0):
+        file_path = Path(file_path)
+        with self._lock:
+            self._pending_result = None
+        reply = self._send(f"PLAY\t{file_path.resolve()}\t{start_seconds}")
+        with self._lock:
+            if reply == "OK":
+                self._pending_result = ("status", f"Playing preview: {file_path.name}")
+            elif reply.startswith("ERROR"):
+                self._pending_result = ("error", reply[6:].strip())
+
+    def poll_pending(self):
+        with self._lock:
+            result = self._pending_result
+            self._pending_result = None
+        return result
+
+    def get_playback_info(self):
+        reply = self._send("GET_INFO")
+        if reply == "NONE" or reply.startswith("ERROR"):
+            return None, None, None
+        if reply.startswith("INFO\t"):
+            parts = reply.split("\t", 3)
+            if len(parts) >= 4:
+                name, time_pos_s, duration_s = parts[1], parts[2], parts[3]
+                try:
+                    time_pos = float(time_pos_s) if time_pos_s else None
+                    duration = float(duration_s) if duration_s else None
+                except ValueError:
+                    time_pos = duration = None
+                return name, time_pos, duration
+        return None, None, None
+
+
 def list_entries(state: BrowserState):
     entries = list(state.current_path.iterdir())
     if not state.show_hidden:
@@ -226,8 +338,12 @@ def load_persisted_state_into(state: BrowserState) -> None:
 
     if playlist:
         state.playlist = playlist
-        state.playlist_selected = 0
-        state.playlist_scroll = 0
+        state.playlist_selected = min(
+            data.get("playlist_selected", 0), max(0, len(playlist) - 1)
+        )
+        state.playlist_scroll = min(
+            data.get("playlist_scroll", 0), max(0, len(playlist) - 1)
+        )
 
 
 def save_state(state: BrowserState) -> None:
@@ -239,6 +355,8 @@ def save_state(state: BrowserState) -> None:
             "current_playing_file": str(state.last_playing_path) if state.last_playing_path else None,
             "browser_selected": state.selected,
             "browser_scroll": state.scroll,
+            "playlist_selected": state.playlist_selected,
+            "playlist_scroll": state.playlist_scroll,
         }
         STATE_FILE.write_text(json.dumps(data))
     except Exception:
