@@ -9,12 +9,25 @@ import subprocess
 import sys
 import threading
 import time
+from typing import Literal
+
+
+lib_dir = Path(__file__).resolve().parent / "libs"
+if not lib_dir.is_dir():
+    raise RuntimeError("Local mpv library directory not found")
+if sys.platform.startswith("win"):
+    os.add_dll_directory(str(lib_dir))
+else:
+    var = "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
+    existing = os.environ.get(var, "")
+    os.environ[var] = f"{str(lib_dir)}:{existing}" if existing else str(lib_dir)
+import mpv
+
 
 DAEMON_SOCKET_PATH = Path.home() / ".tuplet_tui_audio_player.sock"
 
 
 def ensure_daemon_running():
-    """Connect to the playback daemon; if not running, start it and retry."""
     for _ in range(2):
         try:
             s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -26,14 +39,14 @@ def ensure_daemon_running():
             return True
         except (socket.error, OSError):
             pass
-        # Start daemon
+
         root = Path(__file__).resolve().parent
-        daemon_py = root / "daemon.py"
-        if not daemon_py.is_file():
+        daemon_script = root / "daemon.py"
+        if not daemon_script.is_file():
             return False
         try:
             subprocess.Popen(
-                [sys.executable, str(daemon_py)],
+                [sys.executable, str(daemon_script)],
                 cwd=str(root),
                 start_new_session=True,
                 stdout=subprocess.DEVNULL,
@@ -41,28 +54,13 @@ def ensure_daemon_running():
             )
         except Exception:
             return False
-        time.sleep(0.4)
+
+        time.sleep(0.5)
     return False
 
 
-def _load_local_mpv():
-    lib_dir = Path(__file__).resolve().parent / "libs"
-    if not lib_dir.is_dir():
-        return
-    if sys.platform.startswith("win"):
-        os.add_dll_directory(str(lib_dir))
-    else:
-        var = "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
-        existing = os.environ.get(var, "")
-        os.environ[var] = f"{str(lib_dir)}:{existing}" if existing else str(lib_dir)
-
-
-_load_local_mpv()
-
-import mpv
-
-
 STATE_FILE = Path.home() / ".tuplet_tui_audio_player.json"
+
 
 @dataclass
 class BrowserState:
@@ -70,14 +68,14 @@ class BrowserState:
     selected: int = 0
     scroll: int = 0
     show_hidden: bool = False
-    playlist: list = None          # list of Path objects
+    playlist: list = None
     playlist_selected: int = 0
     playlist_scroll: int = 0
-    active_pane: str = "browser"   # "browser" or "playlist"
+    active_pane: Literal["browser", "playlist"] = "browser"
     playing_from_playlist: bool = False
     playing_index: int = -1
     was_playing: bool = False
-    last_playing_path: Path | None = None  # path of currently/last playing file (for persistence)
+    last_playing_path: Path | None = None
 
     def __post_init__(self):
         if self.playlist is None:
@@ -88,7 +86,7 @@ class AudioPreviewPlayer:
     def __init__(self):
         self.player = mpv.MPV(video=False)
         self.current_path = None
-        self._pending_result = None  # ("status"|"error", message) set by background probe
+        self._pending_result = None
         self._probe_lock = threading.Lock()
 
     def stop(self):
@@ -131,7 +129,10 @@ class AudioPreviewPlayer:
                 probe.wait_until_playing(timeout=3)
             except Exception as exc:
                 with self._probe_lock:
-                    self._pending_result = ("error", f"Cannot play {file_path.name}: {exc}")
+                    self._pending_result = (
+                        "error",
+                        f"Cannot play {file_path.name}: {exc}",
+                    )
                 return
             finally:
                 try:
@@ -141,7 +142,10 @@ class AudioPreviewPlayer:
             try:
                 self.play(file_path, start_seconds=start_seconds)
                 with self._probe_lock:
-                    self._pending_result = ("status", f"Playing preview: {file_path.name}")
+                    self._pending_result = (
+                        "status",
+                        f"Playing preview: {file_path.name}",
+                    )
             except Exception as exc:
                 with self._probe_lock:
                     self._pending_result = ("error", f"Error: {exc}")
@@ -352,7 +356,9 @@ def save_state(state: BrowserState) -> None:
         data = {
             "playlist": [str(p) for p in state.playlist],
             "current_directory": str(state.current_path.resolve()),
-            "current_playing_file": str(state.last_playing_path) if state.last_playing_path else None,
+            "current_playing_file": (
+                str(state.last_playing_path) if state.last_playing_path else None
+            ),
             "browser_selected": state.selected,
             "browser_scroll": state.scroll,
             "playlist_selected": state.playlist_selected,
