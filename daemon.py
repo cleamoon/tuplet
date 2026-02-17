@@ -1,7 +1,3 @@
-"""
-Background audio daemon. Owns the mpv instance and keeps playing after the TUI exits.
-Listens on a Unix socket for play/pause/seek/get_info commands.
-"""
 from __future__ import annotations
 
 import os
@@ -10,19 +6,16 @@ import sys
 from pathlib import Path
 
 
-def _load_local_mpv():
-    lib_dir = Path(__file__).resolve().parent / "libs"
-    if not lib_dir.is_dir():
-        return
-    if sys.platform.startswith("win"):
-        os.add_dll_directory(str(lib_dir))
-    else:
-        var = "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
-        existing = os.environ.get(var, "")
-        os.environ[var] = f"{str(lib_dir)}:{existing}" if existing else str(lib_dir)
+lib_dir = Path(__file__).resolve().parent / "libs"
+if not lib_dir.is_dir():
+    raise RuntimeError("Local mpv library directory not found")
+if sys.platform.startswith("win"):
+    os.add_dll_directory(str(lib_dir))
+else:
+    var = "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
+    existing = os.environ.get(var, "")
+    os.environ[var] = f"{str(lib_dir)}:{existing}" if existing else str(lib_dir)
 
-
-_load_local_mpv()
 import mpv
 
 SOCKET_PATH = Path.home() / ".tuplet_tui_audio_player.sock"

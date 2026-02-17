@@ -12,18 +12,6 @@ import time
 from typing import Literal
 
 
-lib_dir = Path(__file__).resolve().parent / "libs"
-if not lib_dir.is_dir():
-    raise RuntimeError("Local mpv library directory not found")
-if sys.platform.startswith("win"):
-    os.add_dll_directory(str(lib_dir))
-else:
-    var = "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
-    existing = os.environ.get(var, "")
-    os.environ[var] = f"{str(lib_dir)}:{existing}" if existing else str(lib_dir)
-import mpv
-
-
 DAEMON_SOCKET_PATH = Path.home() / ".tuplet_tui_audio_player.sock"
 
 
@@ -82,103 +70,9 @@ class BrowserState:
             self.playlist = []
 
 
-class AudioPreviewPlayer:
-    def __init__(self):
-        self.player = mpv.MPV(video=False)
-        self.current_path = None
-        self._pending_result = None
-        self._probe_lock = threading.Lock()
-
-    def stop(self):
-        try:
-            self.player.stop()
-        except Exception:
-            pass
-        self.current_path = None
-
-    def toggle_pause(self):
-        """Pause if playing, resume if paused. No-op if nothing loaded."""
-        if not self.current_path:
-            return
-        try:
-            self.player.pause = not self.player.pause
-        except Exception:
-            pass
-
-    def play(self, audio_path, start_seconds=0):
-        self.stop()
-        self.current_path = Path(audio_path)
-        audio_path = str(audio_path)
-        try:
-            self.player.play(audio_path)
-            if start_seconds:
-                self.player.seek(max(0, float(start_seconds)), reference="absolute")
-        except Exception as exc:
-            raise RuntimeError(str(exc)) from exc
-        return self.player
-
-    def try_play(self, file_path, start_seconds=0):
-        file_path = Path(file_path)
-        with self._probe_lock:
-            self._pending_result = None
-
-        def _probe():
-            probe = mpv.MPV(video=False, vo="null", ao="null")
-            try:
-                probe.play(str(file_path))
-                probe.wait_until_playing(timeout=3)
-            except Exception as exc:
-                with self._probe_lock:
-                    self._pending_result = (
-                        "error",
-                        f"Cannot play {file_path.name}: {exc}",
-                    )
-                return
-            finally:
-                try:
-                    probe.terminate()
-                except Exception:
-                    pass
-            try:
-                self.play(file_path, start_seconds=start_seconds)
-                with self._probe_lock:
-                    self._pending_result = (
-                        "status",
-                        f"Playing preview: {file_path.name}",
-                    )
-            except Exception as exc:
-                with self._probe_lock:
-                    self._pending_result = ("error", f"Error: {exc}")
-
-        thread = threading.Thread(target=_probe, daemon=True)
-        thread.start()
-
-    def poll_pending(self):
-        with self._probe_lock:
-            result = self._pending_result
-            self._pending_result = None
-        return result
-
-    def get_playback_info(self):
-        if not self.current_path:
-            return None, None, None
-        try:
-            time_pos = self.player.time_pos
-            duration = self.player.duration
-            idle = self.player.idle_active
-        except Exception:
-            return self.current_path.name, None, None
-        if idle:
-            self.current_path = None
-            return None, None, None
-        return self.current_path.name, time_pos, duration
-
-
 class DaemonPlayer:
-    """Proxy to the background daemon so playback continues after the TUI exits."""
-
     def __init__(self):
-        self._pending_result = None  # ("status"|"error", message)
+        self._pending_result: tuple[Literal["status", "error"], str] | None = None
         self._lock = threading.Lock()
 
     def _send(self, msg: str) -> str:
@@ -186,7 +80,7 @@ class DaemonPlayer:
             s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             s.settimeout(3.0)
             s.connect(str(DAEMON_SOCKET_PATH))
-            s.sendall((msg + "\n").encode("utf-8"))
+            s.sendall(f"{msg}\n".encode("utf-8"))
             buf = b""
             while b"\n" not in buf and len(buf) < 8192:
                 chunk = s.recv(4096)
@@ -202,7 +96,6 @@ class DaemonPlayer:
         self._send("STOP")
 
     def quit_daemon(self):
-        """Tell the daemon to exit and stop playback (full quit)."""
         self._send("QUIT")
 
     def toggle_pause(self):
@@ -214,17 +107,6 @@ class DaemonPlayer:
         if reply.startswith("ERROR"):
             raise RuntimeError(reply[6:].strip())
         return None
-
-    def try_play(self, file_path, start_seconds=0):
-        file_path = Path(file_path)
-        with self._lock:
-            self._pending_result = None
-        reply = self._send(f"PLAY\t{file_path.resolve()}\t{start_seconds}")
-        with self._lock:
-            if reply == "OK":
-                self._pending_result = ("status", f"Playing preview: {file_path.name}")
-            elif reply.startswith("ERROR"):
-                self._pending_result = ("error", reply[6:].strip())
 
     def poll_pending(self):
         with self._lock:
