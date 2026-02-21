@@ -1,6 +1,6 @@
 import curses
 from model import save_state
-from view import AUDIO_EXTENSIONS
+from view import MEDIA_EXTENSIONS
 
 
 def handle_key(key, entries, state, visible_height):
@@ -22,7 +22,7 @@ def handle_key(key, entries, state, visible_height):
     if key == ord("a") and state.active_pane == "browser":
         if entries:
             chosen = entries[state.selected]
-            if chosen.is_file() and chosen.suffix.lower() in AUDIO_EXTENSIONS:
+            if chosen.is_file() and chosen.suffix.lower() in MEDIA_EXTENSIONS:
                 if chosen not in state.playlist:
                     state.playlist.append(chosen)
                     save_state(state)
@@ -152,7 +152,7 @@ def handle_action(action, player):
     payload = action[1] if len(action) > 1 else None
     if action_type == "select_audio":
         path = payload
-        if path.suffix.lower() not in AUDIO_EXTENSIONS:
+        if path.suffix.lower() not in MEDIA_EXTENSIONS:
             return ("status", "Not an audio file")
         try:
             player.play(path)
@@ -161,7 +161,7 @@ def handle_action(action, player):
             return ("status", f"Cannot play: {exc}")
     if action_type == "toggle_play_pause":
         player.toggle_pause()
-        return None  # status shown via playback info bar
+        return None
     if action_type == "status":
         return ("status", payload)
     return None
