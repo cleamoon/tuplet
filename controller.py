@@ -10,6 +10,13 @@ def handle_key(key, entries, state, visible_height):
     if key == ord(" "):
         return ("toggle_play_pause",)
 
+    # ── 'r': toggle Repeat All mode ────────────────────────────────────
+    if key == ord("r"):
+        state.repeat_all = not state.repeat_all
+        save_state(state)
+        status = "Repeat all: ON" if state.repeat_all else "Repeat all: OFF"
+        return ("status", status)
+
     # ── Tab: switch pane ──────────────────────────────────────────────
     if key == ord("\t"):
         if state.active_pane == "browser":

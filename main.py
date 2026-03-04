@@ -59,6 +59,13 @@ def file_browser(stdscr, start_path: Path):
             and state.playlist
         ):
             next_index = state.playing_index + 1
+            if next_index >= len(state.playlist):
+                if state.repeat_all and state.playlist:
+                    next_index = 0
+                else:
+                    # reached end of playlist; stop autoplay
+                    state.playing_from_playlist = False
+                    state.playing_index = -1
             if 0 <= next_index < len(state.playlist):
                 state.playing_index = next_index
                 state.playlist_selected = next_index
@@ -69,12 +76,8 @@ def file_browser(stdscr, start_path: Path):
                 result = handle_action(("select_audio", next_path), player)
                 if result:
                     _, status_msg = result
-            else:
-                # reached end of playlist; stop autoplay
-                state.playing_from_playlist = False
-                state.playing_index = -1
 
-        show_info_bar(stdscr, playing_name, (time_pos, duration))
+        show_info_bar(stdscr, playing_name, (time_pos, duration), state.repeat_all)
 
         if status_msg:
             show_status(stdscr, status_msg)
