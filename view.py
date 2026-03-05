@@ -126,7 +126,7 @@ def render_browser(
     playlist_scroll,
 ):
     """Render the split-pane view: file browser on the left, playlist on the right."""
-    stdscr.clear()
+    stdscr.erase()
     max_y, max_x = stdscr.getmaxyx()
 
     # ── Column widths ─────────────────────────────────────────────────
