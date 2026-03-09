@@ -266,7 +266,13 @@ def _format_time(seconds):
     return f"{minutes:02d}:{secs:02d}"
 
 
-def show_info_bar(stdscr, playing_name=None, progress=None, repeat_all=False):
+def show_info_bar(
+    stdscr,
+    playing_name=None,
+    progress=None,
+    repeat_all=False,
+    random_play=False,
+):
     max_y, max_x = stdscr.getmaxyx()
     line = max(0, max_y - 2)
     stdscr.move(line, 0)
@@ -290,12 +296,14 @@ def show_info_bar(stdscr, playing_name=None, progress=None, repeat_all=False):
 
     bold = curses.A_BOLD
     repeat_text = "  [Repeat: ALL]" if repeat_all else "  [Repeat: Off]"
+    shuffle_text = "  [Shuffle: On]" if random_play else "  [Shuffle: Off]"
 
     segments = [
         (label, color_pair(CP_GREEN, bold)),
         (name, color_pair(CP_AUDIO_NAME, bold)),
         (time_text, color_pair(CP_HEADER)),
         (repeat_text, color_pair(CP_STATUS)),
+        (shuffle_text, color_pair(CP_STATUS)),
     ]
 
     try:

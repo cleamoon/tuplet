@@ -17,6 +17,13 @@ def handle_key(key, entries, state, visible_height):
         status = "Repeat all: ON" if state.repeat_all else "Repeat all: OFF"
         return ("status", status)
 
+    # ── 's': toggle Random play (shuffle) mode ─────────────────────────
+    if key == ord("s"):
+        state.random_play = not state.random_play
+        save_state(state)
+        status = "Random play: ON" if state.random_play else "Random play: OFF"
+        return ("status", status)
+
     # ── Tab: switch pane ──────────────────────────────────────────────
     if key == ord("\t"):
         if state.active_pane == "browser":

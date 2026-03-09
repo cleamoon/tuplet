@@ -1,5 +1,6 @@
 import argparse
 import curses
+import random
 from pathlib import Path
 
 from controller import handle_action, handle_key
@@ -58,14 +59,22 @@ def file_browser(stdscr, start_path: Path):
             and playing_name is None
             and state.playlist
         ):
-            next_index = state.playing_index + 1
-            if next_index >= len(state.playlist):
-                if state.repeat_all and state.playlist:
-                    next_index = 0
+            if state.random_play:
+                n = len(state.playlist)
+                if n > 1 and state.playing_index >= 0:
+                    indices = [i for i in range(n) if i != state.playing_index]
+                    next_index = random.choice(indices)
                 else:
-                    # reached end of playlist; stop autoplay
-                    state.playing_from_playlist = False
-                    state.playing_index = -1
+                    next_index = random.randint(0, n - 1)
+            else:
+                next_index = state.playing_index + 1
+                if next_index >= len(state.playlist):
+                    if state.repeat_all and state.playlist:
+                        next_index = 0
+                    else:
+                        # reached end of playlist; stop autoplay
+                        state.playing_from_playlist = False
+                        state.playing_index = -1
             if 0 <= next_index < len(state.playlist):
                 state.playing_index = next_index
                 state.playlist_selected = next_index
@@ -77,7 +86,13 @@ def file_browser(stdscr, start_path: Path):
                 if result:
                     _, status_msg = result
 
-        show_info_bar(stdscr, playing_name, (time_pos, duration), state.repeat_all)
+        show_info_bar(
+            stdscr,
+            playing_name,
+            (time_pos, duration),
+            state.repeat_all,
+            state.random_play,
+        )
 
         if status_msg:
             show_status(stdscr, status_msg)

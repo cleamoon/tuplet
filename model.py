@@ -64,6 +64,7 @@ class BrowserState:
     was_playing: bool = False
     last_playing_path: Path | None = None
     repeat_all: bool = False
+    random_play: bool = False
 
     def __post_init__(self):
         if self.playlist is None:
@@ -233,6 +234,9 @@ def load_persisted_state_into(state: BrowserState) -> None:
     repeat_all = data.get("repeat_all")
     if isinstance(repeat_all, bool):
         state.repeat_all = repeat_all
+    random_play = data.get("random_play")
+    if isinstance(random_play, bool):
+        state.random_play = random_play
 
 
 def save_state(state: BrowserState) -> None:
@@ -249,6 +253,7 @@ def save_state(state: BrowserState) -> None:
             "playlist_selected": state.playlist_selected,
             "playlist_scroll": state.playlist_scroll,
             "repeat_all": state.repeat_all,
+            "random_play": state.random_play,
         }
         STATE_FILE.write_text(json.dumps(data))
     except Exception:
