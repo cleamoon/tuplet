@@ -107,6 +107,23 @@ def _truncate_to_width(s: str, max_width: int) -> str:
     return s
 
 
+def _right_truncate_to_width(s: str, max_width: int) -> str:
+    """Return the rightmost substring of s that fits in max_width terminal cells."""
+    if max_width <= 0:
+        return ""
+
+    w = 0
+    chars = []
+    for c in reversed(s):
+        cw = _cell_width(c)
+        if w + cw > max_width:
+            break
+        chars.append(c)
+        w += cw
+
+    return "".join(reversed(chars))
+
+
 def get_visible_height(stdscr):
     max_y, _ = stdscr.getmaxyx()
     return max(0, max_y - 3)
@@ -130,7 +147,7 @@ def render_browser(
     max_y, max_x = stdscr.getmaxyx()
 
     # ── Column widths ─────────────────────────────────────────────────
-    divider_col = max(10, (max_x * 2) // 3)
+    divider_col = max(10, max_x // 2)
     browser_width = divider_col - 2  # usable text width in browser pane
     playlist_left = divider_col + 1  # starting x for playlist text
     playlist_width = max(
@@ -172,14 +189,11 @@ def render_browser(
     else:
         end = min(len(display), scroll + visible_height)
         for row, idx in enumerate(range(scroll, end), start=1):
-            text = _truncate_to_width(display[idx], browser_width)
+            text = _right_truncate_to_width(display[idx], browser_width)
             entry = entries[idx]
 
-            if idx == selected:
-                if browser_is_active:
-                    attr = color_pair(CP_SELECTED, curses.A_BOLD)
-                else:
-                    attr = color_pair(CP_INACTIVE_SEL)
+            if browser_is_active and idx == selected:
+                attr = color_pair(CP_SELECTED, curses.A_BOLD)
             elif entry.is_dir():
                 attr = color_pair(CP_DIR, curses.A_BOLD)
             elif entry.suffix.lower() in MEDIA_EXTENSIONS:
@@ -206,13 +220,10 @@ def render_browser(
         for row, idx in enumerate(range(playlist_scroll, end), start=1):
             num = f"{idx + 1:>3}. "
             name = playlist[idx].name
-            text = _truncate_to_width(num + name, playlist_width)
+            text = _right_truncate_to_width(num + name, playlist_width)
 
-            if idx == playlist_selected:
-                if not browser_is_active:
-                    attr = color_pair(CP_SELECTED, curses.A_BOLD)
-                else:
-                    attr = color_pair(CP_INACTIVE_SEL)
+            if (not browser_is_active) and idx == playlist_selected:
+                attr = color_pair(CP_SELECTED, curses.A_BOLD)
             elif playlist[idx].suffix.lower() in MEDIA_EXTENSIONS:
                 attr = color_pair(CP_GREEN)
             else:

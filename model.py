@@ -11,7 +11,8 @@ import time
 from typing import Literal
 
 
-DAEMON_SOCKET_PATH = Path.home() / ".tuplet_tui_audio_player.sock"
+CONFIG_DIR = Path.home() / ".tuplet_tui_audio_player"
+DAEMON_SOCKET_PATH = CONFIG_DIR / "socket"
 
 
 def ensure_daemon_running():
@@ -24,7 +25,9 @@ def ensure_daemon_running():
             s.recv(4096)
             s.close()
             return True
-        except (socket.error, OSError):
+        except (socket.error, OSError) as e:
+            print("Error connecting to daemon", e)
+            time.sleep(1)
             pass
 
         root = Path(__file__).resolve().parent
@@ -39,14 +42,16 @@ def ensure_daemon_running():
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-        except Exception:
+        except Exception as e:
+            print("Error starting daemon", e)
+            time.sleep(1)
             return False
 
         time.sleep(0.5)
     return False
 
 
-STATE_FILE = Path.home() / ".tuplet_tui_audio_player.json"
+STATE_FILE = CONFIG_DIR / "state.json"
 
 
 @dataclass
@@ -242,6 +247,7 @@ def load_persisted_state_into(state: BrowserState) -> None:
 def save_state(state: BrowserState) -> None:
     """Persist current state (playlist, current directory, current playing file) to the hidden JSON file."""
     try:
+        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "playlist": [str(p) for p in state.playlist],
             "current_directory": str(state.current_path.resolve()),

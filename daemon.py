@@ -18,7 +18,8 @@ else:
 
 import mpv
 
-SOCKET_PATH = Path.home() / ".tuplet_tui_audio_player.sock"
+CONFIG_DIR = Path.home() / ".tuplet_tui_audio_player"
+SOCKET_PATH = CONFIG_DIR / "socket"
 
 
 def _run_daemon():
@@ -83,6 +84,7 @@ def _run_daemon():
         except Exception as e:
             return f"ERROR {e}"
 
+    SOCKET_PATH.parent.mkdir(parents=True, exist_ok=True)
     if SOCKET_PATH.exists():
         try:
             SOCKET_PATH.unlink()

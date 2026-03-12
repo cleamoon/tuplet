@@ -15,7 +15,13 @@ from model import (
     load_persisted_state_into,
     save_state,
 )
-from view import get_visible_height, init_colors, render_browser, show_info_bar, show_status
+from view import (
+    get_visible_height,
+    init_colors,
+    render_browser,
+    show_info_bar,
+    show_status,
+)
 
 
 def file_browser(stdscr, start_path: Path):
@@ -114,11 +120,11 @@ def file_browser(stdscr, start_path: Path):
         if key == -1:
             continue
 
-        if key == ord('Q'):  # Shift+Q: full quit, stop daemon and playback
+        if key == ord("Q"):  # Shift+Q: full quit, stop daemon and playback
             save_state(state)
             player.quit_daemon()
             break
-        if key in (ord('q'), 27):  # q or ESC: exit TUI only, daemon keeps playing
+        if key in (ord("q"), 27):  # q or ESC: exit TUI only, daemon keeps playing
             save_state(state)
             break
         else:
