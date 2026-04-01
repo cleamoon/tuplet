@@ -69,6 +69,7 @@ CP_STATUS = 5
 CP_AUDIO_NAME = 6
 CP_BAR = 7
 CP_INACTIVE_SEL = 8
+CP_ERROR = 9
 
 
 def init_colors():
@@ -82,6 +83,7 @@ def init_colors():
     curses.init_pair(CP_AUDIO_NAME, curses.COLOR_MAGENTA, -1)
     curses.init_pair(CP_BAR, curses.COLOR_BLACK, curses.COLOR_GREEN)
     curses.init_pair(CP_INACTIVE_SEL, curses.COLOR_WHITE, curses.COLOR_BLACK)
+    curses.init_pair(CP_ERROR, curses.COLOR_RED, -1)
 
 
 def color_pair(pair, extra=0):
@@ -124,6 +126,31 @@ def _right_truncate_to_width(s: str, max_width: int) -> str:
     return "".join(reversed(chars))
 
 
+def _scrolling_slice(s: str, max_width: int, offset: int) -> str:
+    """Return a left-to-right slice of s starting at *offset* that fits in max_width cells."""
+    if max_width <= 0:
+        return ""
+    if offset < 0:
+        offset = 0
+    # Fast path when string already fits
+    total_w = 0
+    for c in s:
+        total_w += _cell_width(c)
+        if total_w > max_width:
+            break
+    else:
+        return s
+
+    w = 0
+    out_chars = []
+    for c in s[offset:]:
+        cw = _cell_width(c)
+        if w + cw > max_width:
+            break
+        out_chars.append(c)
+        w += cw
+    return "".join(out_chars)
+
 def get_visible_height(stdscr):
     max_y, _ = stdscr.getmaxyx()
     return max(0, max_y - 3)
@@ -141,6 +168,8 @@ def render_browser(
     playlist,
     playlist_selected,
     playlist_scroll,
+    browser_scroll_offset,
+    playlist_scroll_offset,
 ):
     """Render the split-pane view: file browser on the left, playlist on the right."""
     stdscr.erase()
@@ -189,7 +218,18 @@ def render_browser(
     else:
         end = min(len(display), scroll + visible_height)
         for row, idx in enumerate(range(scroll, end), start=1):
-            text = _right_truncate_to_width(display[idx], browser_width)
+            label = display[idx]
+            num = f"{idx + 1:>3}. "
+            # space for the name portion after the numeric prefix
+            name_width = max(0, browser_width - len(num))
+
+            if browser_is_active and idx == selected and name_width > 0:
+                name_part = _scrolling_slice(label, name_width, browser_scroll_offset)
+            else:
+                # non-selected rows: show beginning of the name that fits
+                name_part = _truncate_to_width(label, name_width)
+
+            text = num + name_part
             entry = entries[idx]
 
             if browser_is_active and idx == selected:
@@ -220,7 +260,13 @@ def render_browser(
         for row, idx in enumerate(range(playlist_scroll, end), start=1):
             num = f"{idx + 1:>3}. "
             name = playlist[idx].name
-            text = _right_truncate_to_width(num + name, playlist_width)
+            name_width = max(0, playlist_width - len(num))
+            if (not browser_is_active) and idx == playlist_selected and name_width > 0:
+                name_part = _scrolling_slice(name, name_width, playlist_scroll_offset)
+            else:
+                # non-selected rows: show beginning of the name that fits
+                name_part = _truncate_to_width(name, name_width)
+            text = num + name_part
 
             if (not browser_is_active) and idx == playlist_selected:
                 attr = color_pair(CP_SELECTED, curses.A_BOLD)
@@ -257,6 +303,23 @@ def show_status(stdscr, message):
         try:
             stdscr.addstr(
                 line, 0, message[: max_x - 1], color_pair(CP_STATUS, curses.A_BOLD)
+            )
+        except curses.error:
+            pass
+    stdscr.refresh()
+
+
+def show_error(stdscr, message):
+    """Show an error message on the status line in a distinct style."""
+    max_y, max_x = stdscr.getmaxyx()
+    line = max(0, max_y - 1)
+    stdscr.move(line, 0)
+    stdscr.clrtoeol()
+    if max_x > 0:
+        text = f"ERROR: {message}"
+        try:
+            stdscr.addstr(
+                line, 0, text[: max_x - 1], color_pair(CP_ERROR, curses.A_BOLD)
             )
         except curses.error:
             pass

@@ -26,6 +26,13 @@ def handle_key(key, entries, state, visible_height):
 
     # ── Tab: switch pane ──────────────────────────────────────────────
     if key == ord("\t"):
+        # reset scroll state when switching panes
+        state.browser_scroll_offset = 0
+        state.browser_scroll_last_update = 0.0
+        state.browser_scroll_paused_until = 0.0
+        state.playlist_scroll_offset = 0
+        state.playlist_scroll_last_update = 0.0
+        state.playlist_scroll_paused_until = 0.0
         if state.active_pane == "browser":
             state.active_pane = "playlist"
         else:
@@ -84,6 +91,8 @@ def _handle_browser_nav(key, entries, state, visible_height):
     count = len(entries)
     max_index = max(0, count - 1)
 
+    old_selected = state.selected
+
     if key in (curses.KEY_DOWN, ord("j")):
         if entries:
             state.selected = min(state.selected + 1, max_index)
@@ -104,6 +113,16 @@ def _handle_browser_nav(key, entries, state, visible_height):
             state.selected = max(state.selected - page_size, 0)
             state.scroll = max(state.scroll - page_size, 0)
             save_state(state)
+    elif key == curses.KEY_HOME:
+        if entries:
+            state.selected = 0
+            state.scroll = 0
+            save_state(state)
+    elif key == curses.KEY_END:
+        if entries:
+            state.selected = max_index
+            state.scroll = max(0, count - visible_height)
+            save_state(state)
     elif key in (ord("h"), ord("H")):
         state.show_hidden = not state.show_hidden
         state.selected = 0
@@ -120,6 +139,14 @@ def _handle_browser_nav(key, entries, state, visible_height):
                 state.playing_from_playlist = False
                 state.playing_index = -1
                 action = ("select_audio", chosen)
+    elif key == curses.KEY_RIGHT:
+        if entries:
+            chosen = entries[state.selected]
+            if chosen.is_dir():
+                state.current_path = chosen
+                state.selected = 0
+                state.scroll = 0
+                save_state(state)
     elif key == curses.KEY_BACKSPACE or key == 127:
         parent = state.current_path.parent
         if parent != state.current_path:
@@ -127,6 +154,17 @@ def _handle_browser_nav(key, entries, state, visible_height):
             state.selected = 0
             state.scroll = 0
             save_state(state)
+    elif key == curses.KEY_LEFT:
+        parent = state.current_path.parent
+        if parent != state.current_path:
+            state.current_path = parent
+            state.selected = 0
+            state.scroll = 0
+            save_state(state)
+    if state.selected != old_selected:
+        state.browser_scroll_offset = 0
+        state.browser_scroll_last_update = 0.0
+        state.browser_scroll_paused_until = 0.0
     return action
 
 
@@ -135,6 +173,8 @@ def _handle_playlist_nav(key, state, visible_height):
     count = len(state.playlist)
     if not count:
         return action
+
+    old_selected = state.playlist_selected
 
     if key in (curses.KEY_DOWN, ord("j")):
         state.playlist_selected = min(state.playlist_selected + 1, count - 1)
@@ -150,11 +190,22 @@ def _handle_playlist_nav(key, state, visible_height):
         page_size = max(1, visible_height)
         state.playlist_selected = max(state.playlist_selected - page_size, 0)
         state.playlist_scroll = max(state.playlist_scroll - page_size, 0)
+    elif key == curses.KEY_HOME:
+        state.playlist_selected = 0
+        state.playlist_scroll = 0
+    elif key == curses.KEY_END:
+        state.playlist_selected = count - 1
+        state.playlist_scroll = max(0, count - visible_height)
     elif key in (curses.KEY_ENTER, ord("\n")):
         state.playing_from_playlist = True
         state.playing_index = state.playlist_selected
         chosen = state.playlist[state.playlist_selected]
         action = ("select_audio", chosen)
+
+    if state.playlist_selected != old_selected:
+        state.playlist_scroll_offset = 0
+        state.playlist_scroll_last_update = 0.0
+        state.playlist_scroll_paused_until = 0.0
 
     return action
 
@@ -167,12 +218,12 @@ def handle_action(action, player):
     if action_type == "select_audio":
         path = payload
         if path.suffix.lower() not in MEDIA_EXTENSIONS:
-            return ("status", "Not an audio file")
+            return ("error", "Not an audio file")
         try:
             player.play(path)
             return ("status", f"Loading: {path.name}")
         except Exception as exc:
-            return ("status", f"Cannot play: {exc}")
+            return ("error", f"Cannot play: {exc}")
     if action_type == "toggle_play_pause":
         player.toggle_pause()
         return None

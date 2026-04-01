@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import errno
 import json
 import socket
+import stat
 import subprocess
 import sys
 import threading
@@ -13,10 +15,23 @@ from typing import Literal
 
 CONFIG_DIR = Path.home() / ".tuplet_tui_audio_player"
 DAEMON_SOCKET_PATH = CONFIG_DIR / "socket"
+try:
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    # Filesystem setup failures should not crash startup.
+    pass
 
 
 def ensure_daemon_running():
     for _ in range(2):
+        try:
+            if DAEMON_SOCKET_PATH.exists():
+                mode = DAEMON_SOCKET_PATH.lstat().st_mode
+                if not stat.S_ISSOCK(mode):
+                    DAEMON_SOCKET_PATH.unlink()
+        except Exception as e:
+            print("Error checking daemon socket", e)
+            pass
         try:
             s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             s.settimeout(1.0)
@@ -26,6 +41,15 @@ def ensure_daemon_running():
             s.close()
             return True
         except (socket.error, OSError) as e:
+            if getattr(e, "errno", None) not in {
+                errno.ENOENT,
+                errno.ECONNREFUSED,
+                errno.ENOTSOCK,
+            }:
+                print("Error connecting to daemon", e)
+            time.sleep(1)
+            pass
+        except Exception as e:
             print("Error connecting to daemon", e)
             time.sleep(1)
             pass
@@ -70,6 +94,12 @@ class BrowserState:
     last_playing_path: Path | None = None
     repeat_all: bool = False
     random_play: bool = False
+    browser_scroll_offset: int = 0
+    browser_scroll_last_update: float = 0.0
+    browser_scroll_paused_until: float = 0.0
+    playlist_scroll_offset: int = 0
+    playlist_scroll_last_update: float = 0.0
+    playlist_scroll_paused_until: float = 0.0
 
     def __post_init__(self):
         if self.playlist is None:
