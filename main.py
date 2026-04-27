@@ -29,8 +29,12 @@ from view import (
 def file_browser(stdscr, start_path: Path):
     curses.curs_set(0)
     init_colors()
-    if not ensure_daemon_running():
-        raise SystemExit("Could not start or connect to playback daemon.")
+    daemon_ready = ensure_daemon_running()
+    init_error_msg = None
+    if not daemon_ready:
+        init_error_msg = "Could not start or connect to playback daemon."
+    last_retry_at = 0.0
+    RETRY_INTERVAL_SEC = 3.0
     state = BrowserState(current_path=start_path)
     load_persisted_state_into(state)
     player = DaemonPlayer()
@@ -40,6 +44,17 @@ def file_browser(stdscr, start_path: Path):
     SCROLL_END_PAUSE_SEC = 0.5
 
     while True:
+        if not daemon_ready:
+            now = time.monotonic()
+            if (now - last_retry_at) >= RETRY_INTERVAL_SEC:
+                daemon_ready = ensure_daemon_running()
+                last_retry_at = now
+                if daemon_ready:
+                    init_error_msg = None
+                    status_msg = "Connected to playback daemon."
+                else:
+                    init_error_msg = "Could not start or connect to playback daemon."
+
         entries, has_parent = list_entries(state)
         display = build_display(entries, has_parent)
         visible_height = get_visible_height(stdscr)
@@ -143,7 +158,10 @@ def file_browser(stdscr, start_path: Path):
             state.browser_scroll_offset,
             state.playlist_scroll_offset,
         )
-        playing_name, time_pos, duration = player.get_playback_info()
+        if daemon_ready:
+            playing_name, time_pos, duration = player.get_playback_info()
+        else:
+            playing_name, time_pos, duration = (None, None, None)
 
         # ── Autoplay next item in playlist when one finishes ───────────
         if (
@@ -192,7 +210,7 @@ def file_browser(stdscr, start_path: Path):
             show_status(stdscr, status_msg)
             status_msg = None
 
-        pending = player.poll_pending()
+        pending = player.poll_pending() if daemon_ready else None
         if pending:
             level, message = pending
             if level == "error":
@@ -201,6 +219,9 @@ def file_browser(stdscr, start_path: Path):
                 stdscr.getch()
             else:
                 show_status(stdscr, message)
+
+        if init_error_msg:
+            show_error(stdscr, init_error_msg)
 
         # remember whether we were playing this frame (for next iteration)
         state.was_playing = playing_name is not None
@@ -212,7 +233,8 @@ def file_browser(stdscr, start_path: Path):
 
         if key == ord("Q"):  # Shift+Q: full quit, stop daemon and playback
             save_state(state)
-            player.quit_daemon()
+            if daemon_ready:
+                player.quit_daemon()
             break
         if key in (ord("q"), 27):  # q or ESC: exit TUI only, daemon keeps playing
             save_state(state)
@@ -222,7 +244,13 @@ def file_browser(stdscr, start_path: Path):
             if action and action[0] == "select_audio":
                 state.last_playing_path = action[1]
                 save_state(state)
-            result = handle_action(action, player)
+            if action and action[0] in {"select_audio", "toggle_play_pause"} and not daemon_ready:
+                result = (
+                    "error",
+                    "Playback daemon is unavailable. Waiting for reconnection...",
+                )
+            else:
+                result = handle_action(action, player)
             if result:
                 level, message = result
                 if level == "error":
