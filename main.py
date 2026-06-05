@@ -12,10 +12,17 @@ from model import (
     clamp_selection,
     DaemonPlayer,
     ensure_daemon_running,
+    last_daemon_error,
     list_entries,
     load_persisted_state_into,
     save_state,
 )
+
+
+def _daemon_error_message() -> str:
+    if last_daemon_error:
+        return f"Could not start playback daemon: {last_daemon_error}"
+    return "Could not start or connect to playback daemon."
 from view import (
     get_visible_height,
     init_colors,
@@ -32,7 +39,7 @@ def file_browser(stdscr, start_path: Path):
     daemon_ready = ensure_daemon_running()
     init_error_msg = None
     if not daemon_ready:
-        init_error_msg = "Could not start or connect to playback daemon."
+        init_error_msg = _daemon_error_message()
     last_retry_at = 0.0
     RETRY_INTERVAL_SEC = 3.0
     state = BrowserState(current_path=start_path)
@@ -53,7 +60,7 @@ def file_browser(stdscr, start_path: Path):
                     init_error_msg = None
                     status_msg = "Connected to playback daemon."
                 else:
-                    init_error_msg = "Could not start or connect to playback daemon."
+                    init_error_msg = _daemon_error_message()
 
         entries, has_parent = list_entries(state)
         display = build_display(entries, has_parent)

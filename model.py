@@ -15,6 +15,8 @@ from typing import Literal
 
 CONFIG_DIR = Path.home() / ".tuplet_tui_audio_player"
 DAEMON_SOCKET_PATH = CONFIG_DIR / "socket"
+DAEMON_LOG_PATH = CONFIG_DIR / "daemon.log"
+last_daemon_error: str | None = None
 try:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 except Exception:
@@ -22,7 +24,34 @@ except Exception:
     pass
 
 
+def _extract_daemon_error(log_text: str) -> str | None:
+    if not log_text.strip():
+        return None
+    for line in reversed(log_text.splitlines()):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith(
+            ("OSError:", "RuntimeError:", "ImportError:", "ModuleNotFoundError:")
+        ):
+            return stripped
+        if stripped.startswith("Error ") or "Error:" in stripped:
+            return stripped
+    lines = [line.strip() for line in log_text.splitlines() if line.strip()]
+    return lines[-1] if lines else None
+
+
+def _read_daemon_log_error() -> str | None:
+    if not DAEMON_LOG_PATH.exists():
+        return None
+    try:
+        return _extract_daemon_error(DAEMON_LOG_PATH.read_text(errors="replace"))
+    except Exception:
+        return None
+
+
 def ensure_daemon_running():
+    global last_daemon_error
     for _ in range(2):
         try:
             if DAEMON_SOCKET_PATH.exists():
@@ -39,6 +68,7 @@ def ensure_daemon_running():
             s.sendall(b"GET_INFO\n")
             s.recv(4096)
             s.close()
+            last_daemon_error = None
             return True
         except (socket.error, OSError) as e:
             if getattr(e, "errno", None) not in {
@@ -57,21 +87,35 @@ def ensure_daemon_running():
         root = Path(__file__).resolve().parent
         daemon_script = root / "daemon.py"
         if not daemon_script.is_file():
+            last_daemon_error = "daemon.py not found"
             return False
         try:
-            subprocess.Popen(
+            log_file = open(DAEMON_LOG_PATH, "a", encoding="utf-8")
+            log_file.write("\n--- daemon spawn ---\n")
+            log_file.flush()
+            proc = subprocess.Popen(
                 [sys.executable, str(daemon_script)],
                 cwd=str(root),
                 start_new_session=True,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stderr=log_file,
             )
+            log_file.close()
         except Exception as e:
             print("Error starting daemon", e)
+            last_daemon_error = str(e)
             time.sleep(1)
             return False
 
         time.sleep(0.5)
+        if proc.poll() is not None:
+            last_daemon_error = _read_daemon_log_error() or (
+                f"Daemon exited immediately (code {proc.returncode})"
+            )
+            continue
+        time.sleep(0.5)
+
+    last_daemon_error = last_daemon_error or _read_daemon_log_error()
     return False
 
 

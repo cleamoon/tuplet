@@ -3,19 +3,91 @@ from __future__ import annotations
 import os
 import socket
 import sys
+from ctypes import CDLL
 from pathlib import Path
 
 
-lib_dir = Path(__file__).resolve().parent / "libs"
-if not lib_dir.is_dir():
-    raise RuntimeError("Local mpv library directory not found")
-if sys.platform.startswith("win"):
-    os.add_dll_directory(str(lib_dir))
-else:
-    var = "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
-    existing = os.environ.get(var, "")
-    os.environ[var] = f"{str(lib_dir)}:{existing}" if existing else str(lib_dir)
+def _mpv_lib_names() -> tuple[str, ...]:
+    if sys.platform.startswith("win"):
+        return ("mpv-2.dll", "libmpv-2.dll", "mpv-1.dll")
+    if sys.platform == "darwin":
+        return ("libmpv.dylib", "libmpv.2.dylib")
+    return ("libmpv.so", "libmpv.so.2", "libmpv.so.1")
 
+
+def _mpv_lib_candidates() -> list[Path]:
+    root = Path(__file__).resolve().parent
+    candidates: list[Path] = []
+
+    bundled = root / "libs"
+    if bundled.is_dir():
+        candidates.append(bundled)
+
+    if sys.platform == "darwin":
+        brew_prefix = Path(os.environ.get("HOMEBREW_PREFIX", "/opt/homebrew"))
+        for rel in ("lib", "opt/mpv/lib"):
+            path = brew_prefix / rel
+            if path.is_dir():
+                candidates.append(path)
+    elif not sys.platform.startswith("win"):
+        for path in (Path("/usr/local/lib"), Path("/usr/lib")):
+            if path.is_dir():
+                candidates.append(path)
+
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for path in candidates:
+        resolved = path.resolve()
+        if resolved not in seen:
+            seen.add(resolved)
+            unique.append(resolved)
+    return unique
+
+
+def _try_load_mpv_lib(lib_dir: Path) -> Path | None:
+    for name in _mpv_lib_names():
+        lib_file = lib_dir / name
+        if not lib_file.is_file():
+            continue
+        try:
+            CDLL(str(lib_file))
+            return lib_file
+        except OSError:
+            continue
+    return None
+
+
+def _setup_mpv_library() -> None:
+    if sys.platform.startswith("win"):
+        lib_dir = Path(__file__).resolve().parent / "libs"
+        if not lib_dir.is_dir():
+            raise RuntimeError(
+                "Local mpv library directory not found. "
+                "Place mpv DLLs in libs/ or install mpv."
+            )
+        os.add_dll_directory(str(lib_dir))
+        return
+
+    var = "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
+    for lib_dir in _mpv_lib_candidates():
+        lib_file = _try_load_mpv_lib(lib_dir)
+        if lib_file is None:
+            continue
+        existing = os.environ.get(var, "")
+        os.environ[var] = (
+            f"{lib_dir}:{existing}" if existing else str(lib_dir)
+        )
+        return
+
+    hint = (
+        "Try: brew install mpv"
+        if sys.platform == "darwin"
+        else "Install mpv and libmpv development libraries for your distro."
+    )
+    raise RuntimeError(f"Cannot load libmpv from any known location. {hint}")
+
+
+_setup_mpv_library()
 import mpv
 
 CONFIG_DIR = Path.home() / ".tuplet_tui_audio_player"
